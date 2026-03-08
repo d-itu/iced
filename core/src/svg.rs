@@ -1,13 +1,26 @@
 //! Load and draw vector graphics.
-use crate::{Color, Radians, Rectangle, Size, image};
+use rustc_hash::FxHasher;
+
+use crate::{Color, Radians, Rectangle, Size};
 
 use std::borrow::Cow;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 /// The unique identifier of some [`Handle`] data.
-pub type Id = image::Id;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Id(u64);
+
+impl Id {
+    fn unique() -> Self {
+        use std::sync::atomic::{self, AtomicU64};
+
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+        Self(NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed))
+    }
+}
 
 /// A raster image that can be drawn.
 #[derive(Debug, Clone, PartialEq)]
@@ -99,7 +112,11 @@ impl Handle {
 
     fn from_data(data: Data) -> Handle {
         let id = match &data {
-            Data::Path(path) => Id::path(path),
+            Data::Path(path) => {
+                let mut hasher = FxHasher::default();
+                path.hash(&mut hasher);
+                Id(hasher.finish())
+            }
             Data::Bytes(_) | Data::Tree(_) => Id::unique(),
         };
         Handle {

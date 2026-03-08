@@ -136,14 +136,15 @@ where
     text_input: TextInput<'a, TextInputEvent, Theme, Renderer>,
     font: Option<Renderer::Font>,
     selection: text_input::Value,
-    on_selected: Box<dyn Fn(T) -> Message>,
-    on_option_hovered: Option<Box<dyn Fn(T) -> Message>>,
+    on_selected: Box<dyn Fn(T) -> Message + 'a>,
+    on_option_hovered: Option<Box<dyn Fn(T) -> Message + 'a>>,
     on_open: Option<Message>,
     on_close: Option<Message>,
-    on_input: Option<Box<dyn Fn(String) -> Message>>,
+    on_input: Option<Box<dyn Fn(String) -> Message + 'a>>,
     padding: Padding,
     size: Option<f32>,
-    text_shaping: text::Shaping,
+    shaping: text::Shaping,
+    ellipsis: text::Ellipsis,
     menu_class: <Theme as menu::Catalog>::Class<'a>,
     menu_height: Length,
 }
@@ -161,7 +162,7 @@ where
         state: &'a State<T>,
         placeholder: &str,
         selection: Option<&T>,
-        on_selected: impl Fn(T) -> Message + 'static,
+        on_selected: impl Fn(T) -> Message + 'a,
     ) -> Self {
         let text_input = TextInput::new(placeholder, &state.value())
             .on_input(TextInputEvent::TextChanged)
@@ -181,7 +182,8 @@ where
             on_close: None,
             padding: text_input::DEFAULT_PADDING,
             size: None,
-            text_shaping: text::Shaping::default(),
+            shaping: text::Shaping::default(),
+            ellipsis: text::Ellipsis::End,
             menu_class: <Theme as Catalog>::default_menu(),
             menu_height: Length::Shrink,
         }
@@ -189,14 +191,14 @@ where
 
     /// Sets the message that should be produced when some text is typed into
     /// the [`TextInput`] of the [`ComboBox`].
-    pub fn on_input(mut self, on_input: impl Fn(String) -> Message + 'static) -> Self {
+    pub fn on_input(mut self, on_input: impl Fn(String) -> Message + 'a) -> Self {
         self.on_input = Some(Box::new(on_input));
         self
     }
 
     /// Sets the message that will be produced when an option of the
     /// [`ComboBox`] is hovered using the arrow keys.
-    pub fn on_option_hovered(mut self, on_option_hovered: impl Fn(T) -> Message + 'static) -> Self {
+    pub fn on_option_hovered(mut self, on_option_hovered: impl Fn(T) -> Message + 'a) -> Self {
         self.on_option_hovered = Some(Box::new(on_option_hovered));
         self
     }
@@ -270,8 +272,14 @@ where
     }
 
     /// Sets the [`text::Shaping`] strategy of the [`ComboBox`].
-    pub fn text_shaping(mut self, shaping: text::Shaping) -> Self {
-        self.text_shaping = shaping;
+    pub fn shaping(mut self, shaping: text::Shaping) -> Self {
+        self.shaping = shaping;
+        self
+    }
+
+    /// Sets the [`text::Ellipsis`] strategy of the [`ComboBox`].
+    pub fn ellipsis(mut self, ellipsis: text::Ellipsis) -> Self {
+        self.ellipsis = ellipsis;
         self
     }
 
@@ -830,6 +838,7 @@ where
                     menu,
                     &filtered_options.options,
                     hovered_option,
+                    &T::to_string,
                     |selection| {
                         self.state.with_inner_mut(|state| {
                             state.value = String::new();
@@ -848,7 +857,8 @@ where
                 )
                 .width(bounds.width)
                 .padding(self.padding)
-                .text_shaping(self.text_shaping);
+                .shaping(self.shaping)
+                .ellipsis(self.ellipsis);
 
                 if let Some(font) = self.font {
                     menu = menu.font(font);
